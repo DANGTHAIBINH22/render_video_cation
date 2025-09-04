@@ -1,0 +1,23 @@
+{
+  "name": "video-creator",
+  "version": "1.0.0",
+  "description": "Tạo video từ file phụ đề SRT và hình ảnh",
+  "main": "create_video.js",
+  "scripts": {
+    "stage:1": "node stage1_create_base.js",
+    "stage:2": "node stage2_add_audio.js",
+    "stage:3": "node stage3_overlay_images.js",
+    "stage:4": "node stage4_add_titles.js",
+    "stages": "npm run stage:1 && npm run stage:2 && npm run stage:3 && npm run stage:4"
+  },
+  "author": "",
+  "license": "ISC",
+  "bin": {
+    "create-video": "./create_video.js"
+  },
+  "dependencies": {
+    "@ffprobe-installer/ffprobe": "^2.1.2",
+    "ffmpeg-static": "^5.2.0",
+    "srt-parser-2": "^1.2.3"
+  }
+}
