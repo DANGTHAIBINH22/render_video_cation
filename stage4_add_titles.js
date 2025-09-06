@@ -9,6 +9,8 @@ const {
   ensureOutputDir,
   parseTimelineSrt,
   buildAssWordReveal,
+  FONTS_DIR,
+  escapePathForFilter,
 } = require('./video_utils');
 
 const INPUT_VIDEO = path.join(OUTPUT_DIR, 'stage3_with_images.mp4');
@@ -21,11 +23,14 @@ async function run() {
   const assContent = buildAssWordReveal(timeline);
   require('fs').writeFileSync(OUTPUT_ASS, assContent, 'utf8');
 
+  const escapedAss = escapePathForFilter(OUTPUT_ASS);
+  const escapedFontsDir = escapePathForFilter(FONTS_DIR);
+
   const args = [
     '-y',
     '-hide_banner',
     '-i', INPUT_VIDEO,
-    '-filter_complex', `subtitles='${OUTPUT_ASS.replace(/:/g, '\\:').replace(/'/g, "\\'")}'[vout]`,
+    '-filter_complex', `subtitles='${escapedAss}':fontsdir='${escapedFontsDir}'[vout]`,
     '-map', '[vout]',
     '-map', '0:a:0',
     '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '22',
@@ -37,7 +42,7 @@ async function run() {
   console.log('FFmpeg args (stage4):');
   console.log(args.join(' '));
   await execCmd(ffmpegPath, args);
-  console.log(`Stage4 OK: ${OUTPUT_FILE}`);
+  console.log(`Stage4 OK: ${OUTPUT_FILE}`,new Date( Date.now()).toISOString());
 }
 
 run().catch(err => { console.error(err.message || err); process.exit(1); }); 

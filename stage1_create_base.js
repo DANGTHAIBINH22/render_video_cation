@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 const path = require('path');
+const fs = require('fs');
 const {
   OUTPUT_DIR,
   INPUTS,
@@ -11,41 +12,57 @@ const {
   ffprobeDuration,
   ensureOutputDir,
   validateInputs,
+  FONTS_DIR,
+  escapePathForFilter,
+  buildTitleAss,
 } = require('./video_utils');
 
 const OUTPUT_FILE = path.join(OUTPUT_DIR, 'stage1_base.mp4');
+const OUTPUT_TITLE_ASS = path.join(OUTPUT_DIR, 'title_top.ass');
 
-function buildFilterGraph() {
+function buildFilterGraph(escapedAss, escapedFontsDir) {
   const filters = [];
+  // Background branch + bake title ASS
   filters.push(
-    `[0:v]scale=${TARGET_WIDTH}:${TARGET_HEIGHT}:force_original_aspect_ratio=increase,` +
+    `[1:v]scale=${TARGET_WIDTH}:${TARGET_HEIGHT}:force_original_aspect_ratio=increase,` +
     `crop=${TARGET_WIDTH}:${TARGET_HEIGHT},` +
     `setsar=1,` +
-    `fps=30[bg];`
+    `fps=30,` +
+    `subtitles='${escapedAss}':fontsdir='${escapedFontsDir}'[bg];`
   );
+  // Foreground (green screen) branch
   filters.push(
-    `[1:v]scale=${TARGET_WIDTH}:${TARGET_HEIGHT}:force_original_aspect_ratio=decrease,` +
+    `[0:v]scale=${TARGET_WIDTH}:${TARGET_HEIGHT}:force_original_aspect_ratio=decrease,` +
     `setsar=1,` +
-    `format=rgba,chromakey=0x00ff00:0.30:0.10[gs];`
+    `format=rgba,chromakey=0x00ff00:0.30:0.10[fg];`
   );
-  filters.push(`[bg][gs]overlay=(W-w)/2:(H-h)/2:format=auto[vout];`);
+  // Compose center
+  filters.push(`[bg][fg]overlay=(W-w)/2:(H-h)/2:format=auto[vout];`);
   return filters.join('');
 }
 
-async function tryRun(preferHardware, audioDuration) {
+async function tryRun(preferHardware, audioDuration, titleAssPath) {
+  const escapedAss = escapePathForFilter(titleAssPath);
+  const escapedFonts = escapePathForFilter(FONTS_DIR);
+  const filterGraph = buildFilterGraph(escapedAss, escapedFonts);
   const args = [
     '-y',
     '-hide_banner',
-    '-r', '30',
-    '-loop', '1', '-t', audioDuration.toFixed(3), '-i', INPUTS.backgroundImage,
+    // Input 0: green screen video (loop)
     '-stream_loop', '-1', '-i', INPUTS.greenScreenVideo,
-    '-filter_complex', buildFilterGraph(),
+    // Input 1: background image (loop)
+    '-loop', '1', '-i', INPUTS.backgroundImage,
+    // Compose
+    '-filter_complex', filterGraph,
+    // Map video out
     '-map', '[vout]',
-    '-an',
-    '-shortest'
+    // Duration theo audio
+    '-t', audioDuration.toFixed(3),
+    // No audio ở stage 1
+    '-an'
   ];
 
-  if (preferHardware) {
+  if (preferHardware && process.platform === 'darwin') {
     args.push(
       '-c:v', 'h264_videotoolbox',
       '-b:v', '6000k',
@@ -59,47 +76,35 @@ async function tryRun(preferHardware, audioDuration) {
       '-c:v', 'libx264',
       '-preset', 'veryfast',
       '-crf', '22',
-      '-threads', '4',
       '-pix_fmt', 'yuv420p',
       OUTPUT_FILE
     );
   }
 
   console.log('FFmpeg args (stage1):');
-  // console.log(args.join(' '));
-  let = _args = [
-    "-stream_loop", "-1",
-
-    "-i", INPUTS.greenScreenVideo,
-    '-loop', '1',
-
-    "-i", INPUTS.backgroundImage,
-
-    "-filter_complex", "[0:v]colorkey=0x00FF00:0.3:0.1[fg];[1:v][fg]scale2ref[bg][fgs];[bg][fgs]overlay=format=auto",
-    "-c:v", "libx264",
-    "-preset", "veryfast",
-    "-crf", "28",
-    "-t", audioDuration.toFixed(0),
-    "-an",
-    '-y',
-    OUTPUT_FILE
-  ];
-  console.log(_args)
-  await execCmd(ffmpegPath, _args);
+  console.log(args.join(' '));
+  await execCmd(ffmpegPath, args);
 }
 
 async function run() {
+  console.log("Start",new Date( Date.now()).toISOString())
   validateInputs();
   ensureOutputDir();
+
+  // Build Title ASS from title.txt
+  const titleText = fs.readFileSync(INPUTS.title, 'utf8');
+  const titleAss = buildTitleAss(titleText);
+  fs.writeFileSync(OUTPUT_TITLE_ASS, titleAss, 'utf8');
+
   const audioDuration = await ffprobeDuration(INPUTS.audio);
-  console.log("audioDuration")
+  console.log(`audioDuration: ${audioDuration.toFixed(3)}s`);
 
   try {
-    await tryRun(true, audioDuration);
-    console.log(`Stage1 OK (HW): ${OUTPUT_FILE}`);
+    await tryRun(true, audioDuration, OUTPUT_TITLE_ASS);
+    console.log(`Stage1 OK (HW/SW): ${OUTPUT_FILE}`);
   } catch (e) {
-    console.warn('Stage1: HW encode failed, fallback x264...');
-    await tryRun(false, audioDuration);
+    console.warn('Stage1: HW encode failed or unavailable, fallback x264...');
+    await tryRun(false, audioDuration, OUTPUT_TITLE_ASS);
     console.log(`Stage1 OK (SW): ${OUTPUT_FILE}`);
   }
 }

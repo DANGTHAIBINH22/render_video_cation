@@ -14,7 +14,10 @@ const INPUTS = {
   audio: path.join(PROJECT_ROOT, 'audio', 'VoiceTXT.mp3'),
   timelineSrt: path.join(PROJECT_ROOT, 'Timeline.srt'),
   pictureDir: path.join(PROJECT_ROOT, 'Image Description'),
+  title: path.join(PROJECT_ROOT, 'title.txt'),
 };
+
+const FONTS_DIR = path.join(PROJECT_ROOT, 'Font');
 
 const TARGET_WIDTH = 1920;
 const TARGET_HEIGHT = 1080;
@@ -53,10 +56,22 @@ function ensureOutputDir() {
 }
 
 function validateInputs() {
-  const missing = Object.entries(INPUTS)
-    .filter(([, p]) => !fs.existsSync(p) && !p.endsWith('pictureDir'))
-    .map(([k, p]) => `${k}: ${p}`);
-  if (!fs.existsSync(INPUTS.pictureDir)) missing.push(`pictureDir: ${INPUTS.pictureDir}`);
+  const missing = [];
+  const requiredFiles = [
+    ['backgroundImage', INPUTS.backgroundImage],
+    ['greenScreenVideo', INPUTS.greenScreenVideo],
+    ['audio', INPUTS.audio],
+    ['timelineSrt', INPUTS.timelineSrt],
+    ['title', INPUTS.title],
+  ];
+  for (const [key, p] of requiredFiles) {
+    if (!fs.existsSync(p) || !fs.statSync(p).isFile()) {
+      missing.push(`${key}: ${p}`);
+    }
+  }
+  if (!fs.existsSync(INPUTS.pictureDir) || !fs.statSync(INPUTS.pictureDir).isDirectory()) {
+    missing.push(`pictureDir: ${INPUTS.pictureDir}`);
+  }
   if (missing.length) {
     throw new Error('Thiếu file/thư mục bắt buộc:\n' + missing.join('\n'));
   }
@@ -100,8 +115,37 @@ function secondsToAssTime(s) {
 }
 
 function escapeAssText(t) {
-  // Bảo toàn \N (newline trong ASS) bằng cách tách trước khi escape
+  // Bảo toàn \\N (newline trong ASS) bằng cách tách trước khi escape
   return t.split('\\N').map(part => part.replace(/[{}]/g, m => `\\${m}`)).join('\\N');
+}
+
+function escapePathForFilter(filePath) {
+  const normalized = filePath.replace(/\\\\/g, '/');
+  return normalized.replace(/:/g, '\\:').replace(/'/g, "\\'");
+}
+
+function buildTitleAss(titleText) {
+  const header = [
+    '[Script Info]',
+    'ScriptType: v4.00+',
+    'PlayResX: 1920',
+    'PlayResY: 1080',
+    'WrapStyle: 2',
+    'ScaledBorderAndShadow: yes',
+    '',
+    '[V4+ Styles]',
+    'Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding',
+    // Alignment=8: top-center; MarginV=40 để cách top 40px; PrimaryColour trắng
+    'Style: Title,Paytone One,38,&H00FFFFFF,&H00FFFFFF,&H00111111,&H00000000,0,0,0,0,100,100,0,0,1,2,0,8,40,40,40,0',
+    '',
+    '[Events]',
+    'Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text',
+  ];
+  const startAss = secondsToAssTime(0);
+  const endAss = secondsToAssTime(24 * 3600); // đủ dài để cover toàn video
+  const textEscaped = escapeAssText((titleText || '').trim());
+  const events = [`Dialogue: 0,${startAss},${endAss},Title,,0,0,0,,{\\an8}${textEscaped}`];
+  return header.concat(events).join('\n');
 }
 
 function buildAssWithKaraoke(timeline) {
@@ -148,8 +192,8 @@ function buildAssWordReveal(timeline) {
     '',
     '[V4+ Styles]',
     'Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding',
-    // Alignment=4: middle-left; MarginL=40 để canh lề trái đối xứng ảnh; Fontsize=72 (x2)
-    'Style: LeftDefault,Arial,64,&H00FFFFFF,&HFFFFFFFF,&H00111111,&H00000000,0,0,0,0,100,100,0,0,1,2,0,4,40,40,40,0',
+    // Alignment=4: middle-left; Font Alata-Regular size 30; MarginL=40
+    'Style: LeftDefault,Alata-Regular,30,&H00FFFFFF,&H00FFFFFF,&H00111111,&H00000000,0,0,0,0,100,100,0,0,1,2,0,4,40,40,40,0',
     '',
     '[Events]',
     'Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text',
@@ -180,13 +224,11 @@ function buildAssWordReveal(timeline) {
     const n = words.length;
     for (let i = 1; i <= n; i++) {
       const partRaw = words.slice(0, i).join(' ');
-      // Giới hạn ký tự mỗi dòng ~ 24 để đảm bảo vùng trái hẹp (đối xứng ảnh ~30% width)
       const partWrapped = wrapTextByChars(partRaw, 24);
       const start = cue.start + ((i - 1) / n) * duration;
       const end = cue.start + (i / n) * duration;
       const startAss = secondsToAssTime(start);
       const endAss = secondsToAssTime(end);
-      // \an4: middle-left, \q2: wrap theo word boundary
       const rendered = `{\\an4\\q2}` + escapeAssText(partWrapped);
       events.push(`Dialogue: 0,${startAss},${endAss},LeftDefault,,0,0,0,,${rendered}`);
     }
@@ -202,6 +244,7 @@ module.exports = {
   TARGET_HEIGHT,
   ffmpegPath,
   ffprobePath,
+  FONTS_DIR,
   execCmd,
   ffprobeDuration,
   ensureOutputDir,
@@ -210,4 +253,6 @@ module.exports = {
   listPicturesSequential,
   buildAssWithKaraoke,
   buildAssWordReveal,
+  escapePathForFilter,
+  buildTitleAss,
 }; 
