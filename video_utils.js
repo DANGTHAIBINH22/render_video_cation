@@ -124,8 +124,15 @@ function escapeAssText(t) {
 }
 
 function escapePathForFilter(filePath) {
-  const normalized = filePath.replace(/\\\\/g, '/');
-  return normalized.replace(/:/g, '\\:').replace(/'/g, "\\'");
+  // 1) Chuyển backslash -> slash
+  let normalized = filePath.replace(/\\/g, '/');
+  // 2) Nếu là Windows drive (D:/...), escape dấu ':' ngay sau drive letter
+  if (/^[A-Za-z]:\//.test(normalized)) {
+    normalized = normalized.replace(/^([A-Za-z]):\//, '$1\\:/');
+  }
+  // 3) Escape dấu nháy đơn trong đường dẫn
+  normalized = normalized.replace(/'/g, "\\'");
+  return normalized;
 }
 
 function buildTitleAss(titleText) {
