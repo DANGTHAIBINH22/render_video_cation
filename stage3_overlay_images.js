@@ -10,6 +10,7 @@ const {
   ensureOutputDir,
   parseTimelineSrt,
   listPicturesSequential,
+  normalizePathForCli,
 } = require('./video_utils');
 
 const INPUT_VIDEO = path.join(OUTPUT_DIR, 'stage2_with_audio.mp4');
@@ -54,10 +55,10 @@ async function run() {
   const args = [
     '-y',
     '-hide_banner',
-    '-i', INPUT_VIDEO,
+    '-i', normalizePathForCli(INPUT_VIDEO),
   ];
   // loop ảnh vô hạn, không cần -t 86400
-  pictureInputs.forEach(p => args.push('-loop', '1', '-i', p));
+  pictureInputs.forEach(p => args.push('-loop', '1', '-i', normalizePathForCli(p)));
 
   const filterComplex = buildFilterGraph(timeline, pictureInputs.length);
 
@@ -68,7 +69,7 @@ async function run() {
     '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '22',
     '-c:a', 'copy',
     '-shortest',
-    OUTPUT_FILE
+    normalizePathForCli(OUTPUT_FILE)
   );
 
   console.log('FFmpeg args (stage3):');

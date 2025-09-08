@@ -38,12 +38,16 @@ function execCmd(cmd, args, options = {}) {
   });
 }
 
+function normalizePathForCli(p) {
+  return p.replace(/\\/g, '/');
+}
+
 async function ffprobeDuration(filePath) {
   const args = [
     '-v', 'error',
     '-show_entries', 'format=duration',
     '-of', 'default=noprint_wrappers=1:nokey=1',
-    filePath,
+    normalizePathForCli(filePath),
   ];
   const { stdout } = await execCmd(ffprobePath, args);
   const dur = parseFloat(stdout.trim());
@@ -255,4 +259,5 @@ module.exports = {
   buildAssWordReveal,
   escapePathForFilter,
   buildTitleAss,
+  normalizePathForCli,
 }; 

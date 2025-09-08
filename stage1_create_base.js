@@ -15,6 +15,7 @@ const {
   FONTS_DIR,
   escapePathForFilter,
   buildTitleAss,
+  normalizePathForCli,
 } = require('./video_utils');
 
 const OUTPUT_FILE = path.join(OUTPUT_DIR, 'stage1_base.mp4');
@@ -49,9 +50,9 @@ async function tryRun(preferHardware, audioDuration, titleAssPath) {
     '-y',
     '-hide_banner',
     // Input 0: green screen video (loop)
-    '-stream_loop', '-1', '-i', INPUTS.greenScreenVideo,
+    '-stream_loop', '-1', '-i', normalizePathForCli(INPUTS.greenScreenVideo),
     // Input 1: background image (loop)
-    '-loop', '1', '-i', INPUTS.backgroundImage,
+    '-loop', '1', '-i', normalizePathForCli(INPUTS.backgroundImage),
     // Compose
     '-filter_complex', filterGraph,
     // Map video out
@@ -62,6 +63,8 @@ async function tryRun(preferHardware, audioDuration, titleAssPath) {
     '-an'
   ];
 
+  const outPath = normalizePathForCli(OUTPUT_FILE);
+
   if (preferHardware && process.platform === 'darwin') {
     args.push(
       '-c:v', 'h264_videotoolbox',
@@ -69,7 +72,7 @@ async function tryRun(preferHardware, audioDuration, titleAssPath) {
       '-maxrate', '8000k',
       '-bufsize', '16000k',
       '-pix_fmt', 'yuv420p',
-      OUTPUT_FILE
+      outPath
     );
   } else {
     args.push(
@@ -77,7 +80,7 @@ async function tryRun(preferHardware, audioDuration, titleAssPath) {
       '-preset', 'veryfast',
       '-crf', '22',
       '-pix_fmt', 'yuv420p',
-      OUTPUT_FILE
+      outPath
     );
   }
 
@@ -87,7 +90,6 @@ async function tryRun(preferHardware, audioDuration, titleAssPath) {
 }
 
 async function run() {
-  console.log("Start",new Date( Date.now()).toISOString())
   validateInputs();
   ensureOutputDir();
 

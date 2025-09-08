@@ -11,6 +11,7 @@ const {
   buildAssWordReveal,
   FONTS_DIR,
   escapePathForFilter,
+  normalizePathForCli,
 } = require('./video_utils');
 
 const INPUT_VIDEO = path.join(OUTPUT_DIR, 'stage3_with_images.mp4');
@@ -29,20 +30,20 @@ async function run() {
   const args = [
     '-y',
     '-hide_banner',
-    '-i', INPUT_VIDEO,
+    '-i', normalizePathForCli(INPUT_VIDEO),
     '-filter_complex', `subtitles='${escapedAss}':fontsdir='${escapedFontsDir}'[vout]`,
     '-map', '[vout]',
     '-map', '0:a:0',
     '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '22',
     '-c:a', 'copy',
     '-shortest',
-    OUTPUT_FILE
+    normalizePathForCli(OUTPUT_FILE)
   ];
 
   console.log('FFmpeg args (stage4):');
   console.log(args.join(' '));
   await execCmd(ffmpegPath, args);
-  console.log(`Stage4 OK: ${OUTPUT_FILE}`,new Date( Date.now()).toISOString());
+  console.log(`Stage4 OK: ${OUTPUT_FILE}`);
 }
 
 run().catch(err => { console.error(err.message || err); process.exit(1); }); 
