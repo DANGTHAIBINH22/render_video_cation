@@ -15,6 +15,7 @@ const INPUTS = {
   timelineSrt: path.join(PROJECT_ROOT, 'Timeline.srt'),
   pictureDir: path.join(PROJECT_ROOT, 'Image Description'),
   title: path.join(PROJECT_ROOT, 'title.txt'),
+  keyColorFile: path.join(PROJECT_ROOT, 'keycolor.txt'),
 };
 
 const FONTS_DIR = path.join(PROJECT_ROOT, 'Font');
@@ -133,6 +134,17 @@ function escapePathForFilter(filePath) {
   // 3) Escape dấu nháy đơn trong đường dẫn
   normalized = normalized.replace(/'/g, "\\'");
   return normalized;
+}
+
+function readKeyColorHex() {
+  try {
+    if (fs.existsSync(INPUTS.keyColorFile)) {
+      const raw = fs.readFileSync(INPUTS.keyColorFile, 'utf8').trim();
+      const m = raw.match(/^#?([0-9A-Fa-f]{6})$/);
+      if (m) return '0x' + m[1].toUpperCase();
+    }
+  } catch (_) {}
+  return '0x00FF00';
 }
 
 function buildTitleAss(titleText) {
@@ -267,4 +279,5 @@ module.exports = {
   escapePathForFilter,
   buildTitleAss,
   normalizePathForCli,
+  readKeyColorHex,
 }; 

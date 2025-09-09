@@ -16,12 +16,13 @@ const {
   escapePathForFilter,
   buildTitleAss,
   normalizePathForCli,
+  readKeyColorHex,
 } = require('./video_utils');
 
 const OUTPUT_FILE = path.join(OUTPUT_DIR, 'stage1_base.mp4');
 const OUTPUT_TITLE_ASS = path.join(OUTPUT_DIR, 'title_top.ass');
 
-function buildFilterGraph(escapedAss, escapedFontsDir) {
+function buildFilterGraph(escapedAss, escapedFontsDir, keyHex) {
   const filters = [];
   // Background branch + bake title ASS
   filters.push(
@@ -31,21 +32,25 @@ function buildFilterGraph(escapedAss, escapedFontsDir) {
     `fps=30,` +
     `subtitles='${escapedAss}':fontsdir='${escapedFontsDir}'[bg];`
   );
-  // Foreground (green screen) branch
+  // Foreground branch: key -> split -> smooth alpha -> merge -> despill -> scale 1.5x
   filters.push(
     `[0:v]scale=${TARGET_WIDTH}:${TARGET_HEIGHT}:force_original_aspect_ratio=decrease,` +
     `setsar=1,` +
-    `format=rgba,chromakey=0x00ff00:0.30:0.10[fg];`
+    `format=rgba,colorkey=${keyHex}:0.34:0.02[fgk];` +
+    `[fgk]split[fgc][fga];` +
+    `[fga]alphaextract,boxblur=3:2[mask];` +
+    `[fgc][mask]alphamerge,despill=green:0.85,scale=iw*1.5:ih*1.5[fg];`
   );
-  // Compose center
-  filters.push(`[bg][fg]overlay=(W-w)/2:(H-h)/2:format=auto[vout];`);
+  // Compose: center X, align bottom Y
+  filters.push(`[bg][fg]overlay=(W-w)/2:H-h:format=auto[vout];`);
   return filters.join('');
 }
 
 async function tryRun(preferHardware, audioDuration, titleAssPath) {
   const escapedAss = escapePathForFilter(titleAssPath);
   const escapedFonts = escapePathForFilter(FONTS_DIR);
-  const filterGraph = buildFilterGraph(escapedAss, escapedFonts);
+  const keyHex = readKeyColorHex();
+  const filterGraph = buildFilterGraph(escapedAss, escapedFonts, keyHex);
   const args = [
     '-y',
     '-hide_banner',
