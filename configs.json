@@ -1,6 +1,6 @@
 {
     "title_top_size" :80, 
     "timeline_word_size" :70,
-    "title_margin_top": 40,
+    "title_margin_top": 20,
     "timeline_word_margin_left": 60
 }

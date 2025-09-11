@@ -33,16 +33,18 @@ function loadConfigs() {
   try {
     const raw = fs.readFileSync(cfgPath, 'utf8');
     const json = JSON.parse(raw);
+    console.log("Configs loaded:", json);
     return {
       title_top_size: safeNumber(json.title_top_size, 38),
       timeline_word_size: safeNumber(json.timeline_word_size, 30),
       title_margin_top: safeNumber(json.title_margin_top, 40),
       timeline_word_margin_left: safeNumber(json.timeline_word_margin_left, 40),
     };
-  } catch (_) {
+  } catch (e) {
+    console.log('Error loading configs.json', e);
     return {
       title_top_size: 80,
-      timeline_word_size: 30,
+      timeline_word_size: 70,
       title_margin_top: 40,
       timeline_word_margin_left: 40,
     };
