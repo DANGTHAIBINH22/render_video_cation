@@ -23,6 +23,34 @@ const FONTS_DIR = path.join(PROJECT_ROOT, 'Font');
 const TARGET_WIDTH = 1920;
 const TARGET_HEIGHT = 1080;
 
+function safeNumber(v, dflt) {
+  const n = Number(v);
+  return Number.isFinite(n) ? n : dflt;
+}
+
+function loadConfigs() {
+  const cfgPath = path.join(PROJECT_ROOT, 'configs.json');
+  try {
+    const raw = fs.readFileSync(cfgPath, 'utf8');
+    const json = JSON.parse(raw);
+    return {
+      title_top_size: safeNumber(json.title_top_size, 38),
+      timeline_word_size: safeNumber(json.timeline_word_size, 30),
+      title_margin_top: safeNumber(json.title_margin_top, 40),
+      timeline_word_margin_left: safeNumber(json.timeline_word_margin_left, 40),
+    };
+  } catch (_) {
+    return {
+      title_top_size: 80,
+      timeline_word_size: 30,
+      title_margin_top: 40,
+      timeline_word_margin_left: 40,
+    };
+  }
+}
+
+const CONFIGS = loadConfigs();
+
 function execCmd(cmd, args, options = {}) {
   return new Promise((resolve, reject) => {
     const p = spawn(cmd, args, { stdio: ['ignore', 'pipe', 'pipe'], ...options });
@@ -148,6 +176,8 @@ function readKeyColorHex() {
 }
 
 function buildTitleAss(titleText) {
+  const fontSize = CONFIGS.title_top_size;
+  const marginTop = CONFIGS.title_margin_top;
   const header = [
     '[Script Info]',
     'ScriptType: v4.00+',
@@ -158,8 +188,7 @@ function buildTitleAss(titleText) {
     '',
     '[V4+ Styles]',
     'Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding',
-    // Alignment=8: top-center; MarginV=40 để cách top 40px; PrimaryColour trắng
-    'Style: Title,Paytone One,38,&H00FFFFFF,&H00FFFFFF,&H00111111,&H00000000,0,0,0,0,100,100,0,0,1,2,0,8,40,40,40,0',
+    `Style: Title,Paytone One,${fontSize},&H00FFFFFF,&H00FFFFFF,&H00111111,&H00000000,0,0,0,0,100,100,0,0,1,2,0,8,40,40,${marginTop},0`,
     '',
     '[Events]',
     'Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text',
@@ -205,6 +234,8 @@ function buildAssWithKaraoke(timeline) {
 }
 
 function buildAssWordReveal(timeline) {
+  const fontSize = CONFIGS.timeline_word_size;
+  const marginLeft = CONFIGS.timeline_word_margin_left;
   const header = [
     '[Script Info]',
     'ScriptType: v4.00+',
@@ -215,8 +246,7 @@ function buildAssWordReveal(timeline) {
     '',
     '[V4+ Styles]',
     'Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding',
-    // Alignment=4: middle-left; Font Alata-Regular size 30; MarginL=40
-    'Style: LeftDefault,Alata-Regular,30,&H00FFFFFF,&H00FFFFFF,&H00111111,&H00000000,0,0,0,0,100,100,0,0,1,2,0,4,40,40,40,0',
+    `Style: LeftDefault,Alata-Regular,${fontSize},&H00FFFFFF,&H00FFFFFF,&H00111111,&H00000000,0,0,0,0,100,100,0,0,1,2,0,4,${marginLeft},40,40,0`,
     '',
     '[Events]',
     'Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text',
@@ -268,6 +298,7 @@ module.exports = {
   ffmpegPath,
   ffprobePath,
   FONTS_DIR,
+  CONFIGS,
   execCmd,
   ffprobeDuration,
   ensureOutputDir,
