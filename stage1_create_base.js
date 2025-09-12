@@ -39,7 +39,7 @@ function buildFilterGraph(escapedAss, escapedFontsDir, keyHex) {
     `format=rgba,colorkey=${keyHex}:0.34:0.02[fgk];` +
     `[fgk]split[fgc][fga];` +
     `[fga]alphaextract,boxblur=3:2[mask];` +
-    `[fgc][mask]alphamerge,despill=green:0.85,scale=iw*1.5:ih*1.5[fg];`
+    `[fgc][mask]alphamerge,despill=green:0.85,scale=iw*1:ih*1[fg];`
   );
   // Compose: center X, align bottom Y
   filters.push(`[bg][fg]overlay=(W-w)/2:H-h:format=auto[vout];`);
