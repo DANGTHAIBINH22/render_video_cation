@@ -2,5 +2,7 @@
     "title_top_size" :80, 
     "timeline_word_size" :70,
     "title_margin_top": 20,
-    "timeline_word_margin_left": 60
+    "timeline_word_margin_left": 20,
+    "timeline_word_region_width_percent": 0.6,
+    "timeline_word_align": "center"
 }

@@ -39,6 +39,10 @@ function loadConfigs() {
       timeline_word_size: safeNumber(json.timeline_word_size, 30),
       title_margin_top: safeNumber(json.title_margin_top, 40),
       timeline_word_margin_left: safeNumber(json.timeline_word_margin_left, 40),
+      timeline_word_align: typeof json.timeline_word_align === 'string' ? json.timeline_word_align : 'left',
+      // Vùng hiển thị: chọn một trong hai, ưu tiên px nếu > 0
+      timeline_word_region_width_px: safeNumber(json.timeline_word_region_width_px, 0),
+      timeline_word_region_width_percent: safeNumber(json.timeline_word_region_width_percent, 0),
     };
   } catch (e) {
     console.log('Error loading configs.json', e);
@@ -47,6 +51,9 @@ function loadConfigs() {
       timeline_word_size: 70,
       title_margin_top: 40,
       timeline_word_margin_left: 40,
+      timeline_word_align: 'left',
+      timeline_word_region_width_px: 0,
+      timeline_word_region_width_percent: 0.35, // ~35% khung mặc định
     };
   }
 }
@@ -238,6 +245,26 @@ function buildAssWithKaraoke(timeline) {
 function buildAssWordReveal(timeline) {
   const fontSize = CONFIGS.timeline_word_size;
   const marginLeft = CONFIGS.timeline_word_margin_left;
+  const align = (CONFIGS.timeline_word_align || 'left').toLowerCase();
+
+  // Tính vùng hiển thị theo config
+  let regionWidthPx = 0;
+  if (CONFIGS.timeline_word_region_width_px > 0) {
+    regionWidthPx = CONFIGS.timeline_word_region_width_px;
+  } else if (CONFIGS.timeline_word_region_width_percent > 0) {
+    const perc = CONFIGS.timeline_word_region_width_percent > 1
+      ? CONFIGS.timeline_word_region_width_percent / 100
+      : CONFIGS.timeline_word_region_width_percent;
+    regionWidthPx = Math.round(TARGET_WIDTH * perc);
+  } else {
+    regionWidthPx = Math.round(TARGET_WIDTH * 0.35);
+  }
+  // Tính margin phải để giới hạn vùng trái
+  const marginRight = Math.max(0, TARGET_WIDTH - marginLeft - regionWidthPx);
+
+  const alignmentCode = align === 'center' ? 5 : 4; // 5: middle-center, 4: middle-left
+  const styleLine = `Style: LeftDefault,Alata-Regular,${fontSize},&H00FFFFFF,&H00FFFFFF,&H00111111,&H00000000,0,0,0,0,100,100,0,0,1,2,0,${alignmentCode},${marginLeft},${marginRight},40,0`;
+
   const header = [
     '[Script Info]',
     'ScriptType: v4.00+',
@@ -248,26 +275,29 @@ function buildAssWordReveal(timeline) {
     '',
     '[V4+ Styles]',
     'Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding',
-    `Style: LeftDefault,Alata-Regular,${fontSize},&H00FFFFFF,&H00FFFFFF,&H00111111,&H00000000,0,0,0,0,100,100,0,0,1,2,0,4,${marginLeft},40,40,0`,
+    styleLine,
     '',
     '[Events]',
     'Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text',
   ];
 
-  function wrapTextByChars(text, maxCharsPerLine) {
+  function wrapByPixelWidth(text, widthPx) {
+    const avgCharWidthFactor = 0.56; // ước lượng cho Alata-Regular
     const words = text.split(/\s+/).filter(Boolean);
     const lines = [];
     let current = '';
+    function widthOf(s) { return Math.round(s.length * fontSize * avgCharWidthFactor); }
     for (const w of words) {
-      if ((current + (current ? ' ' : '') + w).length > maxCharsPerLine) {
+      const cand = current ? current + ' ' + w : w;
+      if (widthOf(cand) > widthPx) {
         if (current) lines.push(current);
         current = w;
       } else {
-        current = current ? current + ' ' + w : w;
+        current = cand;
       }
     }
     if (current) lines.push(current);
-    return lines.join('\\N'); // ASS newline
+    return lines;
   }
 
   const events = [];
@@ -279,15 +309,19 @@ function buildAssWordReveal(timeline) {
     const n = words.length;
     for (let i = 1; i <= n; i++) {
       const partRaw = words.slice(0, i).join(' ');
-      const partWrapped = wrapTextByChars(partRaw, 24);
+      const wrappedLines = wrapByPixelWidth(partRaw, Math.max(100, regionWidthPx));
+      const partWrapped = wrappedLines.join('\\N');
       const start = cue.start + ((i - 1) / n) * duration;
       const end = cue.start + (i / n) * duration;
       const startAss = secondsToAssTime(start);
       const endAss = secondsToAssTime(end);
-      const rendered = `{\\an4\\q2}` + escapeAssText(partWrapped);
+      const alignTag = align === 'center' ? `{\\an5}` : ''; // center trong vùng (ảnh hưởng bởi margins)
+      const rendered = `${alignTag}{\\q2}` + escapeAssText(partWrapped);
       events.push(`Dialogue: 0,${startAss},${endAss},LeftDefault,,0,0,0,,${rendered}`);
     }
   }
+
+  console.log(`Timeline region: width=${regionWidthPx}px, marginLeft=${marginLeft}px, marginRight=${marginRight}px, align=${align}`);
   return header.concat(events).join('\n');
 }
 
