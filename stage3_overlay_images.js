@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 const path = require('path');
+const fs = require('fs');
 const {
   OUTPUT_DIR,
   INPUTS,
@@ -11,10 +12,12 @@ const {
   parseTimelineSrt,
   listPicturesSequential,
   normalizePathForCli,
+  relativePathForCli,
 } = require('./video_utils');
 
 const INPUT_VIDEO = path.join(OUTPUT_DIR, 'stage2_with_audio.mp4');
 const OUTPUT_FILE = path.join(OUTPUT_DIR, 'stage3_with_images.mp4');
+const FILTER_SCRIPT = path.join(OUTPUT_DIR, 'stage3_filter.txt');
 
 function buildFilterGraph(timeline, pictureCount) {
   const filters = [];
@@ -52,28 +55,29 @@ async function run() {
   const pictures = listPicturesSequential(INPUTS.pictureDir);
   const pictureInputs = timeline.map((_, i) => pictures[i]).filter(Boolean);
 
+  // Ghi filter script
+  const filterComplex = buildFilterGraph(timeline, pictureInputs.length);
+  fs.writeFileSync(FILTER_SCRIPT, filterComplex, 'utf8');
+
   const args = [
     '-y',
     '-hide_banner',
-    '-i', normalizePathForCli(INPUT_VIDEO),
+    '-i', normalizePathForCli(relativePathForCli(INPUT_VIDEO)),
   ];
-  // loop ảnh vô hạn, không cần -t 86400
-  pictureInputs.forEach(p => args.push('-loop', '1', '-i', normalizePathForCli(p)));
-
-  const filterComplex = buildFilterGraph(timeline, pictureInputs.length);
+  // loop ảnh vô hạn
+  pictureInputs.forEach(p => args.push('-loop', '1', '-i', normalizePathForCli(relativePathForCli(p))));
 
   args.push(
-    '-filter_complex', filterComplex,
+    '-filter_complex_script', normalizePathForCli(relativePathForCli(FILTER_SCRIPT)),
     '-map', '[vout]',
     '-map', '0:a:0',
     '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '22',
     '-c:a', 'copy',
     '-shortest',
-    normalizePathForCli(OUTPUT_FILE)
+    normalizePathForCli(relativePathForCli(OUTPUT_FILE))
   );
 
-  console.log('FFmpeg args (stage3):');
-  console.log(args.join(' '));
+  console.log('FFmpeg (stage3) using script:', normalizePathForCli(relativePathForCli(FILTER_SCRIPT)));
   await execCmd(ffmpegPath, args);
   console.log(`Stage3 OK: ${OUTPUT_FILE}`);
 }

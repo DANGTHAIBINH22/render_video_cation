@@ -28,6 +28,25 @@ function safeNumber(v, dflt) {
   return Number.isFinite(n) ? n : dflt;
 }
 
+function cssHexToAssColor(hex, fallbackAss) {
+  if (typeof hex !== 'string') return fallbackAss;
+  const v = hex.trim().replace(/^#/, '').toUpperCase();
+  if (/^[0-9A-F]{6}$/.test(v)) {
+    const rr = v.slice(0, 2);
+    const gg = v.slice(2, 4);
+    const bb = v.slice(4, 6);
+    return `&H00${bb}${gg}${rr}`; // AA BB GG RR (AA=00: opaque)
+  }
+  if (/^[0-9A-F]{8}$/.test(v)) {
+    const aa = v.slice(0, 2);
+    const rr = v.slice(2, 4);
+    const gg = v.slice(4, 6);
+    const bb = v.slice(6, 8);
+    return `&H${aa}${bb}${gg}${rr}`;
+  }
+  return fallbackAss;
+}
+
 function loadConfigs() {
   const cfgPath = path.join(PROJECT_ROOT, 'configs.json');
   try {
@@ -40,9 +59,14 @@ function loadConfigs() {
       title_margin_top: safeNumber(json.title_margin_top, 40),
       timeline_word_margin_left: safeNumber(json.timeline_word_margin_left, 40),
       timeline_word_align: typeof json.timeline_word_align === 'string' ? json.timeline_word_align : 'left',
-      // Vùng hiển thị: chọn một trong hai, ưu tiên px nếu > 0
+      // Vùng hiển thị
       timeline_word_region_width_px: safeNumber(json.timeline_word_region_width_px, 0),
       timeline_word_region_width_percent: safeNumber(json.timeline_word_region_width_percent, 0),
+      // Màu sắc
+      title_primary_color: typeof json.title_primary_color === 'string' ? json.title_primary_color : undefined,
+      title_outline_color: typeof json.title_outline_color === 'string' ? json.title_outline_color : undefined,
+      timeline_word_primary_color: typeof json.timeline_word_primary_color === 'string' ? json.timeline_word_primary_color : undefined,
+      timeline_word_outline_color: typeof json.timeline_word_outline_color === 'string' ? json.timeline_word_outline_color : undefined,
     };
   } catch (e) {
     console.log('Error loading configs.json', e);
@@ -53,7 +77,11 @@ function loadConfigs() {
       timeline_word_margin_left: 40,
       timeline_word_align: 'left',
       timeline_word_region_width_px: 0,
-      timeline_word_region_width_percent: 0.35, // ~35% khung mặc định
+      timeline_word_region_width_percent: 0.35,
+      title_primary_color: undefined,
+      title_outline_color: undefined,
+      timeline_word_primary_color: undefined,
+      timeline_word_outline_color: undefined,
     };
   }
 }
@@ -78,6 +106,11 @@ function execCmd(cmd, args, options = {}) {
 
 function normalizePathForCli(p) {
   return p.replace(/\\/g, '/');
+}
+
+function relativePathForCli(absPath) {
+  const rel = path.relative(PROJECT_ROOT, absPath);
+  return normalizePathForCli(rel || absPath);
 }
 
 async function ffprobeDuration(filePath) {
@@ -187,6 +220,8 @@ function readKeyColorHex() {
 function buildTitleAss(titleText) {
   const fontSize = CONFIGS.title_top_size;
   const marginTop = CONFIGS.title_margin_top;
+  const primary = cssHexToAssColor(CONFIGS.title_primary_color, '&H00FFFFFF');
+  const outline = cssHexToAssColor(CONFIGS.title_outline_color, '&H00111111');
   const header = [
     '[Script Info]',
     'ScriptType: v4.00+',
@@ -197,7 +232,7 @@ function buildTitleAss(titleText) {
     '',
     '[V4+ Styles]',
     'Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding',
-    `Style: Title,Paytone One,${fontSize},&H00FFFFFF,&H00FFFFFF,&H00111111,&H00000000,0,0,0,0,100,100,0,0,1,2,0,8,40,40,${marginTop},0`,
+    `Style: Title,Paytone One,${fontSize},${primary},${primary},${outline},&H00000000,0,0,0,0,100,100,0,0,1,2,0,8,40,40,${marginTop},0`,
     '',
     '[Events]',
     'Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text',
@@ -262,8 +297,11 @@ function buildAssWordReveal(timeline) {
   // Tính margin phải để giới hạn vùng trái
   const marginRight = Math.max(0, TARGET_WIDTH - marginLeft - regionWidthPx);
 
+  const primary = cssHexToAssColor(CONFIGS.timeline_word_primary_color, '&H00FFFFFF');
+  const outline = cssHexToAssColor(CONFIGS.timeline_word_outline_color, '&H00111111');
+
   const alignmentCode = align === 'center' ? 5 : 4; // 5: middle-center, 4: middle-left
-  const styleLine = `Style: LeftDefault,Alata-Regular,${fontSize},&H00FFFFFF,&H00FFFFFF,&H00111111,&H00000000,0,0,0,0,100,100,0,0,1,2,0,${alignmentCode},${marginLeft},${marginRight},40,0`;
+  const styleLine = `Style: LeftDefault,Alata-Regular,${fontSize},${primary},${primary},${outline},&H00000000,0,0,0,0,100,100,0,0,1,2,0,${alignmentCode},${marginLeft},${marginRight},40,0`;
 
   const header = [
     '[Script Info]',
@@ -315,7 +353,7 @@ function buildAssWordReveal(timeline) {
       const end = cue.start + (i / n) * duration;
       const startAss = secondsToAssTime(start);
       const endAss = secondsToAssTime(end);
-      const alignTag = align === 'center' ? `{\\an5}` : ''; // center trong vùng (ảnh hưởng bởi margins)
+      const alignTag = align === 'center' ? `{\\an5}` : '';
       const rendered = `${alignTag}{\\q2}` + escapeAssText(partWrapped);
       events.push(`Dialogue: 0,${startAss},${endAss},LeftDefault,,0,0,0,,${rendered}`);
     }
@@ -347,4 +385,5 @@ module.exports = {
   buildTitleAss,
   normalizePathForCli,
   readKeyColorHex,
+  relativePathForCli,
 }; 

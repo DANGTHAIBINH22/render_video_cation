@@ -4,5 +4,9 @@
     "title_margin_top": 20,
     "timeline_word_margin_left": 20,
     "timeline_word_region_width_percent": 0.6,
-    "timeline_word_align": "center"
+    "timeline_word_align": "center",
+    "title_primary_color": "#FFFFFF",
+    "title_outline_color": "#111111",
+    "timeline_word_primary_color": "#FFFFFF",
+    "timeline_word_outline_color": "#111111"
 }

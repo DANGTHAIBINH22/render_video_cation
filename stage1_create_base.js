@@ -3,6 +3,7 @@
 const path = require('path');
 const fs = require('fs');
 const {
+  PROJECT_ROOT,
   OUTPUT_DIR,
   INPUTS,
   TARGET_WIDTH,
@@ -17,10 +18,12 @@ const {
   buildTitleAss,
   normalizePathForCli,
   readKeyColorHex,
+  relativePathForCli,
 } = require('./video_utils');
 
 const OUTPUT_FILE = path.join(OUTPUT_DIR, 'stage1_base.mp4');
 const OUTPUT_TITLE_ASS = path.join(OUTPUT_DIR, 'title_top.ass');
+const FILTER_SCRIPT = path.join(OUTPUT_DIR, 'stage1_filter.txt');
 
 function buildFilterGraph(escapedAss, escapedFontsDir, keyHex) {
   const filters = [];
@@ -40,6 +43,7 @@ function buildFilterGraph(escapedAss, escapedFontsDir, keyHex) {
     `[fgk]split[fgc][fga];` +
     `[fga]alphaextract,boxblur=3:2[mask];` +
     `[fgc][mask]alphamerge,despill=green:0.85,scale=iw*1:ih*1[fg];`
+
   );
   // Compose: center X, align bottom Y
   filters.push(`[bg][fg]overlay=(W-w)/2:H-h:format=auto[vout];`);
@@ -47,19 +51,23 @@ function buildFilterGraph(escapedAss, escapedFontsDir, keyHex) {
 }
 
 async function tryRun(preferHardware, audioDuration, titleAssPath) {
-  const escapedAss = escapePathForFilter(titleAssPath);
-  const escapedFonts = escapePathForFilter(FONTS_DIR);
+  const escapedAss = escapePathForFilter(relativePathForCli(titleAssPath));
+  const escapedFonts = escapePathForFilter(relativePathForCli(FONTS_DIR));
   const keyHex = readKeyColorHex();
   const filterGraph = buildFilterGraph(escapedAss, escapedFonts, keyHex);
+
+  // Ghi filter script ra file
+  fs.writeFileSync(FILTER_SCRIPT, filterGraph, 'utf8');
+
   const args = [
     '-y',
     '-hide_banner',
     // Input 0: green screen video (loop)
-    '-stream_loop', '-1', '-i', normalizePathForCli(INPUTS.greenScreenVideo),
+    '-stream_loop', '-1', '-i', normalizePathForCli(relativePathForCli(INPUTS.greenScreenVideo)),
     // Input 1: background image (loop)
-    '-loop', '1', '-i', normalizePathForCli(INPUTS.backgroundImage),
-    // Compose
-    '-filter_complex', filterGraph,
+    '-loop', '1', '-i', normalizePathForCli(relativePathForCli(INPUTS.backgroundImage)),
+    // Compose qua script
+    '-filter_complex_script', normalizePathForCli(relativePathForCli(FILTER_SCRIPT)),
     // Map video out
     '-map', '[vout]',
     // Duration theo audio
@@ -68,7 +76,7 @@ async function tryRun(preferHardware, audioDuration, titleAssPath) {
     '-an'
   ];
 
-  const outPath = normalizePathForCli(OUTPUT_FILE);
+  const outPath = normalizePathForCli(relativePathForCli(OUTPUT_FILE));
 
   if (preferHardware && process.platform === 'darwin') {
     args.push(
@@ -89,8 +97,7 @@ async function tryRun(preferHardware, audioDuration, titleAssPath) {
     );
   }
 
-  console.log('FFmpeg args (stage1):');
-  console.log(args.join(' '));
+  console.log('FFmpeg (stage1) using script:', normalizePathForCli(relativePathForCli(FILTER_SCRIPT)));
   await execCmd(ffmpegPath, args);
 }
 
