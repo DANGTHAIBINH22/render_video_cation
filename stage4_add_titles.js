@@ -14,6 +14,11 @@ const {
   escapePathForFilter,
   normalizePathForCli,
   relativePathForCli,
+  CONFIGS,
+  getVideoEncoder,
+  buildVideoEncodeArgs,
+  ffprobeDuration,
+  runFfmpegWithProgress,
 } = require('./video_utils');
 
 const INPUT_VIDEO = path.join(OUTPUT_DIR, 'stage3_with_images.mp4');
@@ -40,15 +45,24 @@ async function run() {
     '-i', normalizePathForCli(relativePathForCli(INPUT_VIDEO)),
     '-filter_complex_script', normalizePathForCli(relativePathForCli(FILTER_SCRIPT)),
     '-map', '[vout]',
-    '-map', '0:a:0',
-    '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '22',
+    '-map', '0:a:0'
+  ];
+
+  // Encoder + fps + progress
+  const encoder = getVideoEncoder(true);
+  args.push(...buildVideoEncodeArgs(encoder));
+  args.push('-r', String(CONFIGS.fps_output));
+  args.push('-progress', 'pipe:2', '-stats_period', String(CONFIGS.stats_period));
+
+  args.push(
     '-c:a', 'copy',
     '-shortest',
     normalizePathForCli(relativePathForCli(OUTPUT_FILE))
-  ];
+  );
 
   console.log('FFmpeg (stage4) using script:', normalizePathForCli(relativePathForCli(FILTER_SCRIPT)));
-  await execCmd(ffmpegPath, args);
+  const totalDuration = await ffprobeDuration(INPUTS.audio).catch(() => 0);
+  await runFfmpegWithProgress(args, totalDuration, 'stage4');
   console.log(`Stage4 OK: ${OUTPUT_FILE}`);
 }
 

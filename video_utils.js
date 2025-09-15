@@ -67,6 +67,12 @@ function loadConfigs() {
       title_outline_color: typeof json.title_outline_color === 'string' ? json.title_outline_color : undefined,
       timeline_word_primary_color: typeof json.timeline_word_primary_color === 'string' ? json.timeline_word_primary_color : undefined,
       timeline_word_outline_color: typeof json.timeline_word_outline_color === 'string' ? json.timeline_word_outline_color : undefined,
+      // Encoder/tốc độ
+      encoder: typeof json.encoder === 'string' ? json.encoder : 'auto',
+      x264_preset: typeof json.x264_preset === 'string' ? json.x264_preset : 'veryfast',
+      x264_crf: safeNumber(json.x264_crf, 22),
+      fps_output: safeNumber(json.fps_output, 30),
+      stats_period: safeNumber(json.stats_period, 5),
     };
   } catch (e) {
     console.log('Error loading configs.json', e);
@@ -82,6 +88,11 @@ function loadConfigs() {
       title_outline_color: undefined,
       timeline_word_primary_color: undefined,
       timeline_word_outline_color: undefined,
+      encoder: 'auto',
+      x264_preset: 'veryfast',
+      x264_crf: 22,
+      fps_output: 30,
+      stats_period: 5,
     };
   }
 }
@@ -124,6 +135,77 @@ async function ffprobeDuration(filePath) {
   const dur = parseFloat(stdout.trim());
   if (!Number.isFinite(dur)) throw new Error(`Không lấy được duration từ: ${filePath}`);
   return dur;
+}
+
+function getVideoEncoder(preferHardware) {
+  const desired = (CONFIGS.encoder || 'auto').toLowerCase();
+  if (desired === 'x264') return 'libx264';
+  if (desired === 'nvenc') return 'h264_nvenc';
+  if (desired === 'videotoolbox') return 'h264_videotoolbox';
+  // auto
+  if (preferHardware) {
+    if (process.platform === 'darwin') return 'h264_videotoolbox';
+    if (process.platform === 'win32') return 'h264_nvenc';
+  }
+  return 'libx264';
+}
+
+function buildVideoEncodeArgs(encoder) {
+  const args = [];
+  if (encoder === 'libx264') {
+    args.push('-c:v', 'libx264', '-preset', CONFIGS.x264_preset, '-crf', String(CONFIGS.x264_crf));
+  } else if (encoder === 'h264_videotoolbox') {
+    args.push('-c:v', 'h264_videotoolbox', '-b:v', '6000k', '-maxrate', '8000k', '-bufsize', '16000k');
+  } else if (encoder === 'h264_nvenc') {
+    args.push('-c:v', 'h264_nvenc', '-preset', 'p5', '-b:v', '6000k', '-maxrate', '8000k', '-bufsize', '16000k');
+  } else {
+    args.push('-c:v', encoder);
+  }
+  args.push('-pix_fmt', 'yuv420p');
+  return args;
+}
+
+function formatTimeSec(sec) {
+  const s = Math.max(0, Math.floor(sec));
+  const hh = Math.floor(s / 3600).toString().padStart(2, '0');
+  const mm = Math.floor((s % 3600) / 60).toString().padStart(2, '0');
+  const ss = (s % 60).toString().padStart(2, '0');
+  return `${hh}:${mm}:${ss}`;
+}
+
+function runFfmpegWithProgress(args, totalDurationSec, label = 'ffmpeg') {
+  return new Promise((resolve, reject) => {
+    const p = spawn(ffmpegPath, args, { stdio: ['ignore', 'pipe', 'pipe'] });
+    let lastPct = -1;
+    p.stderr.setEncoding('utf8');
+    p.stderr.on('data', chunk => {
+      const lines = chunk.split(/\r?\n/);
+      let outTime = null;
+      let speed = null;
+      for (const line of lines) {
+        const m1 = /out_time=([0-9:.]+)/.exec(line);
+        if (m1) outTime = m1[1];
+        const m2 = /speed=([0-9.]+)x/.exec(line);
+        if (m2) speed = m2[1];
+        if (/progress=end/.test(line) && totalDurationSec > 0) {
+          console.log(`[${label}] 100.0% | t=${formatTimeSec(totalDurationSec)} | speed=${speed || '-'}x`);
+        }
+      }
+      if (outTime && totalDurationSec > 0) {
+        const parts = outTime.split(':').map(parseFloat);
+        const sec = parts[0] * 3600 + parts[1] * 60 + parts[2];
+        const pct = Math.min(100, Math.max(0, (sec / totalDurationSec) * 100));
+        if (pct - lastPct >= 1) {
+          lastPct = pct;
+          console.log(`[${label}] ${pct.toFixed(1)}% | t=${formatTimeSec(sec)} | speed=${speed || '-'}x`);
+        }
+      }
+    });
+    p.on('close', code => {
+      if (code === 0) return resolve();
+      reject(new Error(`${label} failed with code ${code}`));
+    });
+  });
 }
 
 function ensureOutputDir() {
@@ -386,4 +468,7 @@ module.exports = {
   normalizePathForCli,
   readKeyColorHex,
   relativePathForCli,
+  getVideoEncoder,
+  buildVideoEncodeArgs,
+  runFfmpegWithProgress,
 }; 

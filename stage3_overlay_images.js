@@ -13,6 +13,11 @@ const {
   listPicturesSequential,
   normalizePathForCli,
   relativePathForCli,
+  CONFIGS,
+  getVideoEncoder,
+  buildVideoEncodeArgs,
+  ffprobeDuration,
+  runFfmpegWithProgress,
 } = require('./video_utils');
 
 const INPUT_VIDEO = path.join(OUTPUT_DIR, 'stage2_with_audio.mp4');
@@ -23,7 +28,7 @@ const MAP_FILE = path.join(OUTPUT_DIR, 'stage3_picture_map.txt');
 function buildFilterGraph(timeline, pictureCount) {
   const filters = [];
   // Base label
-  filters.push(`[0:v]fps=30,setsar=1[base];`);
+  filters.push(`[0:v]fps=${CONFIGS.fps_output},setsar=1[base];`);
   let prev = 'base';
   const overlayMargin = 40;
   const rightBoxWidthPx = Math.round(TARGET_WIDTH * 0.30);
@@ -81,8 +86,16 @@ async function run() {
   args.push(
     '-filter_complex_script', normalizePathForCli(relativePathForCli(FILTER_SCRIPT)),
     '-map', '[vout]',
-    '-map', '0:a:0',
-    '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '22',
+    '-map', '0:a:0'
+  );
+
+  // Encoder + fps + progress
+  const encoder = getVideoEncoder(true);
+  args.push(...buildVideoEncodeArgs(encoder));
+  args.push('-r', String(CONFIGS.fps_output));
+  args.push('-progress', 'pipe:2', '-stats_period', String(CONFIGS.stats_period));
+
+  args.push(
     '-c:a', 'copy',
     '-shortest',
     normalizePathForCli(relativePathForCli(OUTPUT_FILE))
@@ -90,7 +103,9 @@ async function run() {
 
   console.log('FFmpeg (stage3) using script:', normalizePathForCli(relativePathForCli(FILTER_SCRIPT)));
   console.log('Picture map written to:', normalizePathForCli(relativePathForCli(MAP_FILE)));
-  await execCmd(ffmpegPath, args);
+
+  const totalDuration = await ffprobeDuration(INPUTS.audio).catch(() => 0);
+  await runFfmpegWithProgress(args, totalDuration, 'stage3');
   console.log(`Stage3 OK: ${OUTPUT_FILE}`);
 }
 

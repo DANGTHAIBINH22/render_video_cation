@@ -8,5 +8,10 @@
     "title_primary_color": "#FFFFFF",
     "title_outline_color": "#111111",
     "timeline_word_primary_color": "#FFFFFF",
-    "timeline_word_outline_color": "#111111"
+    "timeline_word_outline_color": "#111111",
+    "encoder": "auto",
+    "x264_preset": "veryfast",
+    "x264_crf": 24,
+    "fps_output": 30,
+    "stats_period": 5
 }
