@@ -18,6 +18,7 @@ const {
 const INPUT_VIDEO = path.join(OUTPUT_DIR, 'stage2_with_audio.mp4');
 const OUTPUT_FILE = path.join(OUTPUT_DIR, 'stage3_with_images.mp4');
 const FILTER_SCRIPT = path.join(OUTPUT_DIR, 'stage3_filter.txt');
+const MAP_FILE = path.join(OUTPUT_DIR, 'stage3_picture_map.txt');
 
 function buildFilterGraph(timeline, pictureCount) {
   const filters = [];
@@ -55,6 +56,16 @@ async function run() {
   const pictures = listPicturesSequential(INPUTS.pictureDir);
   const pictureInputs = timeline.map((_, i) => pictures[i]).filter(Boolean);
 
+  // Ghi mapping để biết [k:v] là ảnh nào
+  const lines = [];
+  lines.push('Index (FFmpeg)\tStart\tEnd\tRelativePath');
+  for (let i = 0; i < pictureInputs.length; i++) {
+    const cue = timeline[i];
+    const rel = normalizePathForCli(relativePathForCli(pictureInputs[i]));
+    lines.push(`[${1 + i}:v]\t${cue.start.toFixed(3)}\t${cue.end.toFixed(3)}\t${rel}`);
+  }
+  fs.writeFileSync(MAP_FILE, lines.join('\n'), 'utf8');
+
   // Ghi filter script
   const filterComplex = buildFilterGraph(timeline, pictureInputs.length);
   fs.writeFileSync(FILTER_SCRIPT, filterComplex, 'utf8');
@@ -78,6 +89,7 @@ async function run() {
   );
 
   console.log('FFmpeg (stage3) using script:', normalizePathForCli(relativePathForCli(FILTER_SCRIPT)));
+  console.log('Picture map written to:', normalizePathForCli(relativePathForCli(MAP_FILE)));
   await execCmd(ffmpegPath, args);
   console.log(`Stage3 OK: ${OUTPUT_FILE}`);
 }
